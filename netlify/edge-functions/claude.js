@@ -1,20 +1,30 @@
-
 // ============================================================
-// Netlify Edge Function - Claude API 프록시 (스트리밍)
-// Edge Function은 무료 플랜에서도 긴 응답 시간 허용
-// 역할: API 키 보호 + 사용자별 10회 제한 (Upstash Redis)
+// Netlify Edge Function - Claude API 프록시 (디버그 버전)
 // ============================================================
 
 const FREE_LIMIT = 10;
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
 async function redisCmd(command) {
   const url = Netlify.env.get('UPSTASH_REDIS_REST_URL');
   const token = Netlify.env.get('UPSTASH_REDIS_REST_TOKEN');
+  if (!url || !token) {
+    throw new Error('Upstash 환경변수 없음 (URL=' + !!url + ', TOKEN=' + !!token + ')');
+  }
   const res = await fetch(url, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(command)
   });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error('Redis 응답 오류 ' + res.status + ': ' + t.substring(0, 100));
+  }
   const data = await res.json();
   return data.result;
 }
@@ -33,12 +43,6 @@ async function redisKeys(pattern) {
   const result = await redisCmd(['KEYS', pattern]);
   return result || [];
 }
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
 
 export default async (request, context) => {
   if (request.method === 'OPTIONS') {
@@ -87,7 +91,9 @@ export default async (request, context) => {
     try {
       const saved = await redisGet(key);
       if (saved) usageData = saved;
-    } catch (e) {}
+    } catch (e) {
+      return new Response(JSON.stringify({ error: 'Redis GET 실패: ' + e.message }), { status: 500, headers: corsHeaders });
+    }
 
     if (usageData.count >= FREE_LIMIT) {
       return new Response(JSON.stringify({ error: `무료 사용 ${FREE_LIMIT}회가 모두 소진되었습니다. (${userId}님)`, used: usageData.count, limit: FREE_LIMIT }), { status: 429, headers: corsHeaders });
@@ -95,7 +101,7 @@ export default async (request, context) => {
 
     const apiKey = Netlify.env.get('ANTHROPIC_API_KEY');
     if (!apiKey) {
-      return new Response(JSON.stringify({ error: '서버 설정 오류: API 키 없음' }), { status: 500, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: 'ANTHROPIC_API_KEY 환경변수 없음' }), { status: 500, headers: corsHeaders });
     }
 
     const apiRes = await fetch('https://api.anthropic.com/v1/messages', {
@@ -106,10 +112,9 @@ export default async (request, context) => {
     const apiData = await apiRes.json();
 
     if (!apiRes.ok) {
-      return new Response(JSON.stringify({ error: apiData.error?.message || 'API 오류' }), { status: apiRes.status, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: 'Claude API: ' + (apiData.error?.message || apiRes.status) }), { status: apiRes.status, headers: corsHeaders });
     }
 
-    // 횟수 증가
     usageData.count += 1;
     usageData.lastUsed = new Date().toISOString();
     if (!usageData.firstUsed) usageData.firstUsed = usageData.lastUsed;
