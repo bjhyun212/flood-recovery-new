@@ -893,8 +893,20 @@ async function callClaudeAPI(payload) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ userId: CURRENT_USER_ID, payload: payload })
   });
-  var data = await res.json();
+  // keep-alive 공백이 앞에 붙으므로 텍스트로 받아 마지막 JSON만 파싱
+  var rawText = await res.text();
+  var data;
+  try {
+    var trimmed = rawText.trim();
+    // 마지막 줄바꿈 이후가 실제 JSON (공백 keep-alive 무시)
+    var lastBrace = trimmed.lastIndexOf('\n');
+    var jsonPart = lastBrace >= 0 ? trimmed.substring(lastBrace + 1).trim() : trimmed;
+    data = JSON.parse(jsonPart);
+  } catch (parseErr) {
+    throw new Error('응답 파싱 실패: ' + rawText.substring(0, 100));
+  }
   if (res.status === 429) throw new Error('🎁 무료 ' + FREE_LIMIT + '회 소진. 강사에게 문의하세요.');
+  if (data.error) throw new Error(data.error);
   if (!res.ok) throw new Error(data.error || 'API 오류 ' + res.status);
   if (data._freeUsed !== undefined) {
     _freeUsedCount = data._freeUsed;
