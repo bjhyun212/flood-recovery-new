@@ -1,7 +1,8 @@
 // ============================================================
-// Netlify Edge Function - Claude API 프록시 (스트리밍 방식)
-// 핵심: 40초 안에 헤더 반환을 위해 ReadableStream 사용
-//      → Claude API가 오래 걸려도 타임아웃 안 남
+// Netlify Edge Function - Claude API 프록시
+// 핵심: keep-alive 공백을 주기적으로 흘려보내 연결 유지
+//      → Claude 분석이 오래 걸려도 ERR_CONNECTION_CLOSED 방지
+// 브라우저는 응답 끝의 JSON만 파싱 (앞쪽 공백 무시)
 // ============================================================
 
 const FREE_LIMIT = 10;
@@ -24,10 +25,7 @@ async function redisCmd(command) {
   const data = await res.json();
   return data.result;
 }
-async function redisGet(key) {
-  const r = await redisCmd(['GET', key]);
-  return r ? JSON.parse(r) : null;
-}
+async function redisGet(key) { const r = await redisCmd(['GET', key]); return r ? JSON.parse(r) : null; }
 async function redisSet(key, value) { await redisCmd(['SET', key, JSON.stringify(value)]); }
 async function redisDel(key) { await redisCmd(['DEL', key]); }
 async function redisKeys(pattern) { return (await redisCmd(['KEYS', pattern])) || []; }
@@ -78,7 +76,6 @@ export default async (request, context) => {
 
   const key = 'user_' + userId.replace(/[^a-zA-Z0-9가-힣_]/g, '_');
 
-  // 횟수 사전 확인
   let usageData = { count: 0, firstUsed: null, lastUsed: null, userName: userId };
   try {
     const saved = await redisGet(key);
@@ -96,11 +93,20 @@ export default async (request, context) => {
     return new Response(JSON.stringify({ error: 'ANTHROPIC_API_KEY 환경변수 없음' }), { status: 500, headers: corsHeaders });
   }
 
-  // ★★★ 스트리밍: 헤더를 즉시 반환하고, 본문은 천천히 채움 ★★★
-  // 이렇게 해야 Claude API가 오래 걸려도 40초 헤더 타임아웃을 피함
+  // ★★★ keep-alive 스트림 ★★★
+  // 1초마다 공백 문자를 흘려보내 연결을 살려둠
+  // Claude 응답이 도착하면 최종 JSON을 흘려보내고 종료
+  const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
-      const encoder = new TextEncoder();
+      // keep-alive 타이머: 1초마다 공백 1글자
+      let alive = true;
+      const keepAlive = setInterval(() => {
+        if (alive) {
+          try { controller.enqueue(encoder.encode(' ')); } catch (e) {}
+        }
+      }, 1000);
+
       try {
         const apiRes = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
@@ -109,13 +115,15 @@ export default async (request, context) => {
         });
         const apiData = await apiRes.json();
 
+        alive = false;
+        clearInterval(keepAlive);
+
         if (!apiRes.ok) {
-          controller.enqueue(encoder.encode(JSON.stringify({ error: 'Claude API: ' + (apiData.error?.message || apiRes.status) })));
+          controller.enqueue(encoder.encode('\n' + JSON.stringify({ error: 'Claude API: ' + (apiData.error?.message || apiRes.status) })));
           controller.close();
           return;
         }
 
-        // 횟수 증가 저장
         usageData.count += 1;
         usageData.lastUsed = new Date().toISOString();
         if (!usageData.firstUsed) usageData.firstUsed = usageData.lastUsed;
@@ -123,10 +131,13 @@ export default async (request, context) => {
         try { await redisSet(key, usageData); } catch (e) {}
 
         const result = { ...apiData, _freeUsed: usageData.count, _freeRemain: FREE_LIMIT - usageData.count, _freeLimit: FREE_LIMIT };
-        controller.enqueue(encoder.encode(JSON.stringify(result)));
+        // 공백 다음 줄바꿈 후 JSON → 브라우저에서 trim하면 순수 JSON
+        controller.enqueue(encoder.encode('\n' + JSON.stringify(result)));
         controller.close();
       } catch (err) {
-        controller.enqueue(encoder.encode(JSON.stringify({ error: '서버 오류: ' + err.message })));
+        alive = false;
+        clearInterval(keepAlive);
+        controller.enqueue(encoder.encode('\n' + JSON.stringify({ error: '서버 오류: ' + err.message })));
         controller.close();
       }
     }
@@ -134,7 +145,7 @@ export default async (request, context) => {
 
   return new Response(stream, {
     status: 200,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    headers: { ...corsHeaders, 'Content-Type': 'text/plain; charset=utf-8' }
   });
 };
 
