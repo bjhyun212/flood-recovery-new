@@ -5,6 +5,9 @@
 [functions]
   node_bundler = "esbuild"
 
+[functions.claude]
+  timeout = 120
+
 [[headers]]
   for = "/.netlify/functions/*"
   [headers.values]
