@@ -888,7 +888,7 @@ function checkCanUseAPI() {
 }
 async function callClaudeAPI(payload) {
   if (!checkCanUseAPI()) throw new Error('사용자 정보 없음');
-  var res = await fetch('/.netlify/functions/claude', {
+  var res = await fetch('/api/claude', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ userId: CURRENT_USER_ID, payload: payload })
