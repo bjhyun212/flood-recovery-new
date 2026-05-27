@@ -857,8 +857,22 @@ function saveUserInfo() {
   CURRENT_USER_ID   = name + '_' + (org || 'unknown');
   localStorage.setItem('floodUserId',   CURRENT_USER_ID);
   localStorage.setItem('floodUserName', CURRENT_USER_NAME);
+  // 일단 화면을 0으로 초기화 후, 서버에서 실제 횟수 조회하여 갱신
+  _freeUsedCount = 0;
   updateFreeUI();
   setDot(true, CURRENT_USER_NAME + ' 님 확인');
+  // 서버에서 이 사용자의 실제 사용 횟수 조회
+  fetch('/api/claude', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ checkUsage: true, userId: CURRENT_USER_ID })
+  }).then(function(r){ return r.json(); }).then(function(d){
+    if (d && d._freeUsed !== undefined) {
+      _freeUsedCount = d._freeUsed;
+      localStorage.setItem('floodFreeUsed', String(_freeUsedCount));
+      updateFreeUI();
+    }
+  }).catch(function(){ /* 조회 실패해도 무시 */ });
 }
 function getFreeCount() { return _freeUsedCount; }
 function addFreeCount() {}
@@ -3117,11 +3131,13 @@ async function analyze() {
     _autoCleanFieldOverflow(ANA);
     
     // ★ ver7.89: damageCostBasis vs damageCost 일관성 자동 검증 (자기모순 감지)
+    // ★ ver8.10: 모달 없이 자동으로 AI 상담 정정 실행
     var basisCostMismatch = _detectBasisCostMismatch(ANA.items);
     if (basisCostMismatch.mismatches && basisCostMismatch.mismatches.length > 0) {
+      window._pendingBasisCostMismatch = basisCostMismatch;
       setTimeout(function() {
-        _showBasisCostMismatchAlert(basisCostMismatch);
-      }, 1500);
+        _autoFixBasisCostMismatch(basisCostMismatch);
+      }, 1800);
     }
     
     // ★ 원본 보존 (탭 이동 후에도 일관성 유지)
@@ -5375,8 +5391,39 @@ function _showBasisCostMismatchAlert(detection) {
   document.body.appendChild(modal);
 }
 
-// ★ ver8.00: 모달의 [AI 상담으로 정리하기] 버튼 핸들러
-// 모순 항목들의 번호를 추출하여 AI 상담 입력란에 정정 요청 문구 자동 입력
+// ★ ver8.10: 모달 없이 자동으로 산정근거-피해금액 모순을 AI 상담으로 정정
+// 분석 직후 모순 감지 시 호출 → 정정 문구 자동 입력 + 자동 전송
+function _autoFixBasisCostMismatch(detection) {
+  if (!detection || !detection.mismatches || detection.mismatches.length === 0) return;
+  var nos = detection.mismatches.map(function(m){ return '#' + (m.no || (m.idx+1)); }).join(', ');
+  var msg = nos + ' 항목의 산정근거와 피해금액 모순을 점검하고 정정해줘.\n'
+    + '- 산정근거에 [신설-피해없음], "재난 직전 미존재", "제3조제6호" 같은 0원 정당 사유가 명기된 항목은 그대로 두고,\n'
+    + '- 정당 사유 없는 항목은 산정근거의 합계 금액을 피해금액에 반영해줘.';
+  window._pendingBasisCostMismatch = null;
+
+  // 현재 탭 판단: 설계내역서 탭이면 비용상담, 아니면 엔지니어링 상담
+  var t1Tab = document.getElementById('t1');
+  var isOnDesignTab = t1Tab && /\bon\b/.test(t1Tab.className || '');
+
+  if (isOnDesignTab) {
+    var costInput = document.getElementById('costChatInput');
+    if (costInput && costInput.offsetParent !== null) {
+      costInput.value = msg;
+      setDot(true, '산정근거 모순 자동 정정 중...');
+      if (typeof costChatSend === 'function') costChatSend();
+      return;
+    }
+  }
+  // 기본: 탭1 엔지니어링 상담란 사용
+  var planInput = document.getElementById('planReq');
+  if (planInput) {
+    planInput.value = msg;
+    setDot(true, '산정근거 모순 자동 정정 중...');
+    if (typeof revisePlan === 'function') revisePlan();
+  }
+}
+
+
 // ★ ver8.02: 현재 활성 탭에 맞춰 입력란 자동 선택 (탭1=planReq, 탭2=costChatInput)
 //   + 탭 전환이 필요한 경우 자동 전환 + 입력란이 안 보이면 명확한 안내
 function _sendBasisCostMismatchToAI() {
