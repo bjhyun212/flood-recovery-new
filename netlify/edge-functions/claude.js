@@ -5,7 +5,7 @@
 // 브라우저는 응답 끝의 JSON만 파싱 (앞쪽 공백 무시)
 // ============================================================
 
-const FREE_LIMIT = 10;
+const FREE_LIMIT = 5;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -79,23 +79,29 @@ export default async (request, context) => {
   }
 
   // ── 일반 API 호출 ──
-  const { userId, payload } = body;
+  const { userId, payload, countUsage, adminPw } = body;
   if (!userId || userId.length < 2) {
     return new Response(JSON.stringify({ error: '사용자 정보가 필요합니다.' }), { status: 400, headers: corsHeaders });
   }
 
+  // ★ 관리자 무제한: 비밀번호가 맞으면 횟수 체크/차감 모두 건너뜀
+  const isAdmin = adminPw && adminPw === Netlify.env.get('ADMIN_PW');
+
   const key = 'user_' + userId.replace(/[^a-zA-Z0-9가-힣_]/g, '_');
 
   let usageData = { count: 0, firstUsed: null, lastUsed: null, userName: userId };
-  try {
-    const saved = await redisGet(key);
-    if (saved) usageData = saved;
-  } catch (e) {
-    return new Response(JSON.stringify({ error: 'Redis 연결 실패: ' + e.message }), { status: 500, headers: corsHeaders });
-  }
+  if (!isAdmin) {
+    try {
+      const saved = await redisGet(key);
+      if (saved) usageData = saved;
+    } catch (e) {
+      return new Response(JSON.stringify({ error: 'Redis 연결 실패: ' + e.message }), { status: 500, headers: corsHeaders });
+    }
 
-  if (usageData.count >= FREE_LIMIT) {
-    return new Response(JSON.stringify({ error: `무료 사용 ${FREE_LIMIT}회가 모두 소진되었습니다. (${userId}님)`, used: usageData.count, limit: FREE_LIMIT }), { status: 429, headers: corsHeaders });
+    // 차감 대상(피해분석)일 때만 한도 체크
+    if (countUsage && usageData.count >= FREE_LIMIT) {
+      return new Response(JSON.stringify({ error: `무료 사용 ${FREE_LIMIT}건이 모두 소진되었습니다. (${userId}님)`, used: usageData.count, limit: FREE_LIMIT }), { status: 429, headers: corsHeaders });
+    }
   }
 
   const apiKey = Netlify.env.get('ANTHROPIC_API_KEY');
@@ -104,12 +110,9 @@ export default async (request, context) => {
   }
 
   // ★★★ keep-alive 스트림 ★★★
-  // 1초마다 공백 문자를 흘려보내 연결을 살려둠
-  // Claude 응답이 도착하면 최종 JSON을 흘려보내고 종료
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
-      // keep-alive 타이머: 1초마다 공백 1글자
       let alive = true;
       const keepAlive = setInterval(() => {
         if (alive) {
@@ -134,14 +137,16 @@ export default async (request, context) => {
           return;
         }
 
-        usageData.count += 1;
-        usageData.lastUsed = new Date().toISOString();
-        if (!usageData.firstUsed) usageData.firstUsed = usageData.lastUsed;
-        usageData.userName = userId;
-        try { await redisSet(key, usageData); } catch (e) {}
+        // ★ 차감 대상(피해분석)이고 관리자가 아닐 때만 횟수 증가
+        if (countUsage && !isAdmin) {
+          usageData.count += 1;
+          usageData.lastUsed = new Date().toISOString();
+          if (!usageData.firstUsed) usageData.firstUsed = usageData.lastUsed;
+          usageData.userName = userId;
+          try { await redisSet(key, usageData); } catch (e) {}
+        }
 
-        const result = { ...apiData, _freeUsed: usageData.count, _freeRemain: FREE_LIMIT - usageData.count, _freeLimit: FREE_LIMIT };
-        // 공백 다음 줄바꿈 후 JSON → 브라우저에서 trim하면 순수 JSON
+        const result = { ...apiData, _freeUsed: usageData.count, _freeRemain: FREE_LIMIT - usageData.count, _freeLimit: FREE_LIMIT, _isAdmin: isAdmin };
         controller.enqueue(encoder.encode('\n' + JSON.stringify(result)));
         controller.close();
       } catch (err) {
