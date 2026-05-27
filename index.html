@@ -3167,6 +3167,11 @@ async function analyze() {
     // AI가 note에 "[개선복구 신설]"/"[신설-피해없음]"/"[개선복구-단면확대]" 등을 명기했으나
     // recoveryType이 "원형복구"로 남아있는 모순 자동 보정
     _enforceNewlyInstalledConsistency(ANA);
+
+    // ★ ver8.15: 신설(개선복구) 항목 피해금액 0원 강제
+    // 재난 직전 없던 시설을 새로 만드는 신설은 피해 자체가 없으므로 피해금액=0
+    // (단, "전면철거 후 신설" 등 정당한 피해는 제외 — legitDamageWithNew 예외)
+    _enforceNewInstallZeroDamage(ANA);
     
     // ★ ver7.78: 필드 길이 자동 정리 (damageType 폭주 방지)
     _autoCleanFieldOverflow(ANA);
@@ -5845,6 +5850,33 @@ function _inferRecoveryTypeFromModify(ana, modifyItems) {
     }
   });
   return { changed: changedCount, items: changedNos };
+}
+
+// ★★★ ver8.15: 신설(개선복구) 항목 피해금액 0원 강제 ★★★
+// 원칙: 재난 직전 없던 시설을 새로 설치하는 "신설"은 피해가 없으므로 피해금액=0
+//   - [신설]/[개선] 태그 + 신설/미설치/재발방지 키워드가 있으면 피해금액 0원 강제
+//   - 단, "전면철거 후 신설"·"기존 시설 피해" 등 정당하게 피해가 있던 경우는 제외
+//   - damageCost(피해금액)만 0으로, recoveryQty/method(복구비 산정용)는 그대로 유지
+//     → 설계내역서의 공사비는 보존됨
+function _enforceNewInstallZeroDamage(ana) {
+  if (!ana || !ana.items) return;
+  // 신설 신호: [신설], [개선복구 신설], 미설치 구간 신설, 신규 설치, 재발방지 신설 등
+  var newInstallRe = /\[신설[-\s]*피해없음\]|\[개선복구\s*신설\]|\[신설\]|미설치\s*구간\s*신설|신규\s*설치|재해\s*재발\s*방지.*신설|신설.*세굴방지|신설.*안전강화|신설.*기초보호/i;
+  // 정당한 피해 신호 (이게 있으면 0원 강제 안 함 — 실제 피해가 있던 시설)
+  var legitDamageRe = /피해\s*있|피해\s*일부|전면\s*철거|잔존|기존\s*시설|기존\s*구조물|철거\s*후\s*신설|일부\s*존재|직전\s*존재|직전\s*있었|실제\s*존재|단면\s*확대|공법\s*강화|통수\s*단면\s*확대/i;
+
+  ana.items.forEach(function(it) {
+    if ((it.damageCost || 0) <= 0) return; // 이미 0원이면 패스
+    var txt = (it.note || '') + ' ' + (it.damageCostBasis || '') + ' ' + (it.damageType || '');
+    // 신설 신호가 있고 + 정당한 피해 신호가 없을 때만 0원 강제
+    if (newInstallRe.test(txt) && !legitDamageRe.test(txt)) {
+      var prev = it.damageCost;
+      it.damageCost = 0;
+      // 산정근거에 0원 사유 명기 (복구비는 별도 유지됨을 표시)
+      var basis = (it.damageCostBasis || '').replace(/\s*\[자동[^\]]*\]/g, '');
+      it.damageCostBasis = '[신설-피해없음] 재난 직전 미존재 시설로 피해금액 산정 대상 아님(제3조제6호). 복구비(설계내역)는 별도 산정. (이전 표시 ' + prev.toLocaleString() + '원 → 0원 정정)';
+    }
+  });
 }
 
 function _enforceNewlyInstalledConsistency(ana) {
@@ -8932,6 +8964,7 @@ async function revisePlan() {
             });
           }
           _enforceNewlyInstalledConsistency(ANA);
+          _enforceNewInstallZeroDamage(ANA);
           _autoCleanFieldOverflow(ANA);
           // totalDamage 재계산 (보정 함수에서 이미 수행하지만 안전을 위해 한번 더)
           ANA.totalDamage = ANA.items.reduce(function(s,it){return s+(it.damageCost||0);},0);
@@ -10263,6 +10296,7 @@ function _applyAnaChanges() {
     }
   }
   _enforceNewlyInstalledConsistency(ANA);
+  _enforceNewInstallZeroDamage(ANA);
   
   // totalDamage 재계산
   ANA.totalDamage = ANA.items.reduce(function(s, it){ return s + (it.damageCost || 0); }, 0);
