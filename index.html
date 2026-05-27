@@ -133,7 +133,7 @@ select.fc option{background:var(--navy2);}
   <div class="logo">
     <div class="logo-icon"><img src="data:image/jpeg;base64,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" alt="BJH"></div>
     <div>
-      <div class="logo-text"><span>복구설계시스템</span>(BJH)<span class="ver">ver 8.20</span></div>
+      <div class="logo-text" onclick="_adminTap()" style="cursor:pointer;"><span>복구설계시스템</span>(BJH)<span class="ver">ver 8.20</span></div>
       <div style="font-size:10px;color:var(--text2)">자연재해대책법 기반 · 2024 복구단가 자동매칭</div>
     </div>
   </div>
@@ -844,8 +844,9 @@ function fmtK(n) { return truncK(n).toLocaleString(); }
 // ============================================================
 // ★ 무료 사용 관리 - Netlify Functions 서버 기반
 // ============================================================
-var FREE_LIMIT = 10;
+var FREE_LIMIT = 5;
 var CURRENT_USER_ID   = localStorage.getItem('floodUserId')   || '';
+var ADMIN_OVERRIDE_PW = localStorage.getItem('floodAdminPw')  || '';  // 관리자 무제한 비밀번호
 var CURRENT_USER_NAME = localStorage.getItem('floodUserName') || '';
 var _freeUsedCount    = parseInt(localStorage.getItem('floodFreeUsed') || '0');
 
@@ -884,12 +885,17 @@ function updateFreeUI() {
     el.style.color = 'var(--warn)';
     return;
   }
+  if (ADMIN_OVERRIDE_PW) {
+    el.textContent = '🔑 관리자 모드 (무제한) · ' + CURRENT_USER_NAME;
+    el.style.color = 'var(--accent)';
+    return;
+  }
   var remain = Math.max(0, FREE_LIMIT - _freeUsedCount);
   if (remain > 0) {
-    el.textContent = '🎁 무료 ' + _freeUsedCount + '/' + FREE_LIMIT + '회 (' + CURRENT_USER_NAME + ')';
+    el.textContent = '🎁 무료 ' + _freeUsedCount + '/' + FREE_LIMIT + '건 (' + CURRENT_USER_NAME + ')';
     el.style.color = 'var(--success)';
   } else {
-    el.textContent = '⚠️ ' + CURRENT_USER_NAME + ' - 무료 소진';
+    el.textContent = '⚠️ ' + CURRENT_USER_NAME + ' - 무료 ' + FREE_LIMIT + '건 소진';
     el.style.color = 'var(--warn)';
   }
 }
@@ -900,12 +906,47 @@ function checkCanUseAPI() {
   }
   return true;
 }
-async function callClaudeAPI(payload) {
+
+// ★ 관리자 진입: 로고를 5번 빠르게 클릭하면 비밀번호 입력
+var _adminTapCount = 0;
+var _adminTapTimer = null;
+function _adminTap() {
+  _adminTapCount++;
+  clearTimeout(_adminTapTimer);
+  _adminTapTimer = setTimeout(function(){ _adminTapCount = 0; }, 1500);
+  if (_adminTapCount >= 5) {
+    _adminTapCount = 0;
+    if (ADMIN_OVERRIDE_PW) {
+      // 이미 관리자 → 해제할지 묻기
+      if (confirm('현재 관리자 모드(무제한)입니다.\n해제하시겠습니까?')) {
+        ADMIN_OVERRIDE_PW = '';
+        localStorage.removeItem('floodAdminPw');
+        alert('관리자 모드 해제됨. 일반 사용자로 전환됩니다.');
+        updateFreeUI();
+      }
+      return;
+    }
+    var pw = prompt('관리자 비밀번호를 입력하세요:');
+    if (pw) {
+      ADMIN_OVERRIDE_PW = pw;
+      localStorage.setItem('floodAdminPw', pw);
+      alert('관리자 모드 활성화 시도.\n다음 분석부터 무제한으로 적용됩니다.\n(비밀번호가 틀리면 일반 제한이 적용됩니다)');
+      updateFreeUI();
+    }
+  }
+}
+async function callClaudeAPI(payload, opts) {
   if (!checkCanUseAPI()) throw new Error('사용자 정보 없음');
+  opts = opts || {};
   var res = await fetch('/api/claude', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userId: CURRENT_USER_ID, payload: payload })
+    body: JSON.stringify({
+      userId: CURRENT_USER_ID,
+      payload: payload,
+      countUsage: opts.count === true,   // true일 때만 횟수 차감 (피해분석)
+      adminPw: ADMIN_OVERRIDE_PW || ''   // 관리자 무제한
+    })
   });
   // keep-alive 공백이 앞에 붙으므로 텍스트로 받아 마지막 JSON만 파싱
   var rawText = await res.text();
@@ -919,7 +960,7 @@ async function callClaudeAPI(payload) {
   } catch (parseErr) {
     throw new Error('응답 파싱 실패: ' + rawText.substring(0, 100));
   }
-  if (res.status === 429) throw new Error('🎁 무료 ' + FREE_LIMIT + '회 소진. 강사에게 문의하세요.');
+  if (res.status === 429) throw new Error('🎁 무료 ' + FREE_LIMIT + '건이 모두 소진되었습니다. 강사(관리자)에게 문의하세요.');
   if (data.error) throw new Error(data.error);
   if (!res.ok) throw new Error(data.error || 'API 오류 ' + res.status);
   if (data._freeUsed !== undefined) {
@@ -3053,7 +3094,7 @@ async function analyze() {
     + '"overallRecoveryType":"원형복구|개선복구","overallRecoveryReason":"판정사유(법령호번 포함)",'
     + '"items":[{"no":1,"damageType":"피해유형(좌안/우안 구분)","quantity":"피해물량(산출근거)","damageCost":5000000,"damageCostBasis":"공종명 물량×단가=금액(단가출처)","recoveryType":"원형복구|개선복구","method":"복구공법","recoveryQty":"공종명 수량단위(산출근거)","note":"비고 [자가검증✓]"}],"totalDamage":5000000,"urgent":"긴급조치","structures":[{"name":"구조물명(좌안/우안)","type":"형식","spec":"규격","note":"비고"}],"selfAudit":{"passed":true,"summary":"7가지 검증 모두 통과 또는 발견된 주요 수정사항 1~3줄","checks":[{"id":"규격-단가","ok":true,"msg":"흄관 φ300 단가 정확히 적용"},{"id":"물량산식","ok":true,"msg":"L×W×D 산식 일치"},{"id":"부대공","ok":true,"msg":"노상정리·뒷채움 포함"}]}}';
   try {
-    var res = await callClaudeAPI({ model:'claude-sonnet-4-6', max_tokens:16000, temperature:0, messages:[{ role:'user', content:[...imgs, {type:'text', text:prompt}] }] });
+    var res = await callClaudeAPI({ model:'claude-sonnet-4-6', max_tokens:16000, temperature:0, messages:[{ role:'user', content:[...imgs, {type:'text', text:prompt}] }] }, { count: true });
     var d = await res.json();
     if (d.error) throw new Error(d.error.message);
     var raw = d.content[0].text;
