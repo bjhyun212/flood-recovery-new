@@ -68,6 +68,16 @@ export default async (request, context) => {
     return new Response(JSON.stringify({ ok: true }), { status: 200, headers: corsHeaders });
   }
 
+  // ── 사용 횟수만 조회 (분석 실행 없이) ──
+  if (body.checkUsage) {
+    const uid = body.userId;
+    if (!uid) return new Response(JSON.stringify({ error: '사용자 정보 없음' }), { status: 400, headers: corsHeaders });
+    const ckey = 'user_' + uid.replace(/[^a-zA-Z0-9가-힣_]/g, '_');
+    let u = { count: 0 };
+    try { const s = await redisGet(ckey); if (s) u = s; } catch (e) {}
+    return new Response(JSON.stringify({ _freeUsed: u.count, _freeRemain: FREE_LIMIT - u.count, _freeLimit: FREE_LIMIT }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
   // ── 일반 API 호출 ──
   const { userId, payload } = body;
   if (!userId || userId.length < 2) {
